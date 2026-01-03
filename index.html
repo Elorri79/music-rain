@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Blade Runner Live Coding</title>
+    <style>
+        body {
+            margin: 0;
+            background: #05070b;
+            color: #9fd3ff;
+            font-family: monospace;
+            overflow: hidden;
+        }
+
+        canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+
+        #ui {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            padding: 1em;
+            box-sizing: border-box;
+            background: linear-gradient(to bottom,
+                    rgba(5, 7, 11, 0.9),
+                    rgba(5, 7, 11, 0));
+            pointer-events: none;
+            /* Let clicks pass through to canvas if needed, though button needs events */
+        }
+
+        #ui button {
+            pointer-events: auto;
+        }
+
+        button {
+            font-size: 1.1em;
+            padding: 0.4em 1em;
+            background: #1e2a3a;
+            color: #9fd3ff;
+            border: 1px solid #3a5f8a;
+            margin-bottom: 0.5em;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        button:hover {
+            background: #3a5f8a;
+            color: #fff;
+            box-shadow: 0 0 15px rgba(58, 95, 138, 0.5);
+        }
+
+        pre {
+            background: rgba(0, 0, 0, 0.6);
+            padding: 1em;
+            max-height: 55vh;
+            overflow-y: auto;
+            border-left: 3px solid #3a5f8a;
+            white-space: pre-wrap;
+            font-family: 'Courier New', Courier, monospace;
+            text-shadow: 0 0 5px rgba(159, 211, 255, 0.3);
+        }
+
+        /* CRT Scanline Effect */
+        .scanline {
+            width: 100%;
+            height: 100%;
+            z-index: 10;
+            background: linear-gradient(to bottom,
+                    rgba(255, 255, 255, 0),
+                    rgba(255, 255, 255, 0) 50%,
+                    rgba(0, 0, 0, 0.2) 50%,
+                    rgba(0, 0, 0, 0.2));
+            background-size: 100% 4px;
+            position: absolute;
+            pointer-events: none;
+            top: 0;
+            left: 0;
+            animation: flicker 0.15s infinite;
+            mix-blend-mode: overlay;
+        }
+
+        /* Subtle flicker */
+        @keyframes flicker {
+            0% {
+                opacity: 0.9;
+            }
+
+            50% {
+                opacity: 0.95;
+            }
+
+            100% {
+                opacity: 0.9;
+            }
+        }
+
+        /* Vignette */
+        body::before {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: radial-gradient(circle, rgba(0, 0, 0, 0) 60%, rgba(0, 0, 0, 0.6) 100%);
+            pointer-events: none;
+            z-index: 11;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="scanline"></div>
+    <canvas id="rain"></canvas>
+
+    <div id="ui">
+        <h3>🌌 Blade Runner — Live Code</h3>
+        <button onclick="start()">▶ START</button>
+        <pre id="code"></pre>
+    </div>
+
+    <script>
+        /* ===================== LLUVIA ===================== */
+        const canvas = document.getElementById("rain");
+        const rctx = canvas.getContext("2d");
+
+        function resize() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        window.addEventListener("resize", resize);
+        resize();
+
+        const drops = Array.from({ length: 250 }, () => ({
+            x: Math.random() * canvas.width,
+            y: Math.random() * canvas.height,
+            len: Math.random() * 20 + 10,
+            speed: Math.random() * 4 + 4
+        }));
+
+        function rain() {
+            // Clear with a slight fade for trail effect? No, plain clear for rain usually better unless we want fog.
+            // Original code used clearRect. Let's keep it for now but maybe obscure it slightly for "smear" if we want fog.
+            rctx.clearRect(0, 0, canvas.width, canvas.height);
+            rctx.strokeStyle = "rgba(120,180,255,0.35)";
+            rctx.lineWidth = 1;
+
+            for (const d of drops) {
+                rctx.beginPath();
+                rctx.moveTo(d.x, d.y);
+                rctx.lineTo(d.x, d.y + d.len);
+                rctx.stroke();
+
+                d.y += d.speed;
+                if (d.y > canvas.height) {
+                    d.y = -20;
+                    d.x = Math.random() * canvas.width;
+                }
+            }
+            requestAnimationFrame(rain);
+        }
+        rain();
+
+        /* ===================== LIVE CODE ===================== */
+        const codeEl = document.getElementById("code");
+        let coding = false;
+
+        const fragments = [
+            "osc.frequency = ",
+            "gain.gain = ",
+            "filter.cutoff = ",
+            "note = ",
+            "time += ",
+            "memory.fade(",
+            "rain.sync("
+        ];
+
+        const values = [
+            "220;",
+            "261.63;",
+            "293.66;",
+            "Math.random() * 400 + 200;",
+            "2.5;",
+            "slow);",
+            "true);"
+        ];
+
+        function randomLine() {
+            const f = fragments[Math.floor(Math.random() * fragments.length)];
+            const v = values[Math.floor(Math.random() * values.length)];
+            return f + v;
+        }
+
+        function startLiveCode() {
+            coding = true;
+
+            function loop() {
+                if (!coding) return;
+
+                codeEl.textContent += randomLine() + "\n";
+                codeEl.scrollTop = codeEl.scrollHeight;
+
+                setTimeout(loop, 600);
+            }
+            loop();
+        }
+
+        function stopLiveCode() {
+            coding = false;
+        }
+
+        /* ===================== AUDIO ===================== */
+        let audioCtx;
+        let masterGain;
+        let reverbNode;
+
+        // Create a simple impulse response for reverb
+        function createReverb(duration) {
+            const sampleRate = audioCtx.sampleRate;
+            const length = sampleRate * duration;
+            const impulse = audioCtx.createBuffer(2, length, sampleRate);
+
+            for (let channel = 0; channel < 2; channel++) {
+                const channelData = impulse.getChannelData(channel);
+                for (let i = 0; i < length; i++) {
+                    // Exponential decay noise
+                    channelData[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / length, 4);
+                }
+            }
+            return impulse;
+        }
+
+        function playNote(freq, time, duration) {
+            const osc = audioCtx.createOscillator();
+            const noteGain = audioCtx.createGain();
+
+            osc.type = "sawtooth";
+            osc.frequency.setValueAtTime(freq, time);
+
+            // Envelope
+            noteGain.gain.setValueAtTime(0, time);
+            noteGain.gain.linearRampToValueAtTime(0.15, time + 0.5); // Slower attack for Vangelis pad feel
+            noteGain.gain.linearRampToValueAtTime(0, time + duration); // Long release
+
+            // Connect: Osc -> NoteGain -> MasterGain (which goes to Reverb + Destination)
+            osc.connect(noteGain);
+            noteGain.connect(masterGain);
+
+            osc.start(time);
+            osc.stop(time + duration);
+        }
+
+        function start() {
+            if (audioCtx) return;
+
+            codeEl.textContent = "";
+            startLiveCode();
+
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+            // Setup Master Chain with Reverb
+            masterGain = audioCtx.createGain();
+            masterGain.gain.value = 0.5; // Prevent clipping with multiple notes
+
+            const reverb = audioCtx.createConvolver();
+            reverb.buffer = createReverb(3.5); // 3.5 seconds reverb tail
+
+            // Dry signal
+            masterGain.connect(audioCtx.destination);
+            // Wet signal
+            const reverbGain = audioCtx.createGain();
+            reverbGain.gain.value = 0.6; // Mix level
+            masterGain.connect(reverb).connect(reverbGain).connect(audioCtx.destination);
+
+            const scale = [220, 261.63, 293.66, 329.63, 392];
+            let t = audioCtx.currentTime + 0.5;
+
+            for (let i = 0; i < 20; i++) {
+                const note = scale[Math.floor(Math.random() * scale.length)];
+                // Slower notes, longer duration for ambient feel
+                playNote(note, t, 6);
+                t += 3.0;
+            }
+
+            setTimeout(stopLiveCode, 65000);
+        }
+    </script>
+
+</body>
+
+</html>
