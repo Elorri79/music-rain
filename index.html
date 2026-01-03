@@ -121,7 +121,8 @@
 
     <div id="ui">
         <h3>🌌 Blade Runner — Live Code</h3>
-        <button onclick="start()">▶ START</button>
+        <button id="btnStart" onclick="start()">▶ START</button>
+        <button id="btnStop" onclick="stop()" style="display:none;">■ STOP</button>
         <pre id="code"></pre>
     </div>
 
@@ -219,6 +220,8 @@
         let audioCtx;
         let masterGain;
         let reverbNode;
+        let activeOscillators = [];
+        let isPlaying = false;
 
         // Create a simple impulse response for reverb
         function createReverb(duration) {
@@ -245,7 +248,7 @@
 
             // Envelope
             noteGain.gain.setValueAtTime(0, time);
-            noteGain.gain.linearRampToValueAtTime(0.15, time + 0.5); // Slower attack for Vangelis pad feel
+            noteGain.gain.linearRampToValueAtTime(0.12, time + 1.0); // Slower attack
             noteGain.gain.linearRampToValueAtTime(0, time + duration); // Long release
 
             // Connect: Osc -> NoteGain -> MasterGain (which goes to Reverb + Destination)
@@ -254,41 +257,80 @@
 
             osc.start(time);
             osc.stop(time + duration);
+
+            activeOscillators.push(osc);
+            osc.onended = () => {
+                activeOscillators = activeOscillators.filter(o => o !== osc);
+            };
+        }
+
+        function scheduleNextBatch() {
+            if (!isPlaying) return;
+
+            const scale = [220, 261.63, 293.66, 329.63, 392, 440];
+            let t = audioCtx.currentTime + 0.1;
+
+            // Schedule 4 notes ahead
+            for (let i = 0; i < 4; i++) {
+                const note = scale[Math.floor(Math.random() * scale.length)];
+                const duration = 8 + Math.random() * 4;
+                playNote(note, t, duration);
+                t += 3.5 + Math.random() * 2;
+            }
+
+            // Schedule next batch before this one ends
+            setTimeout(scheduleNextBatch, 15000);
         }
 
         function start() {
-            if (audioCtx) return;
+            if (isPlaying) return;
+            isPlaying = true;
+
+            document.getElementById("btnStart").style.display = "none";
+            document.getElementById("btnStop").style.display = "inline-block";
 
             codeEl.textContent = "";
             startLiveCode();
 
-            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
-            // Setup Master Chain with Reverb
-            masterGain = audioCtx.createGain();
-            masterGain.gain.value = 0.5; // Prevent clipping with multiple notes
+                // Setup Master Chain with Reverb
+                masterGain = audioCtx.createGain();
+                masterGain.gain.value = 0.4;
 
-            const reverb = audioCtx.createConvolver();
-            reverb.buffer = createReverb(3.5); // 3.5 seconds reverb tail
+                const reverb = audioCtx.createConvolver();
+                reverb.buffer = createReverb(4.0);
 
-            // Dry signal
-            masterGain.connect(audioCtx.destination);
-            // Wet signal
-            const reverbGain = audioCtx.createGain();
-            reverbGain.gain.value = 0.6; // Mix level
-            masterGain.connect(reverb).connect(reverbGain).connect(audioCtx.destination);
-
-            const scale = [220, 261.63, 293.66, 329.63, 392];
-            let t = audioCtx.currentTime + 0.5;
-
-            for (let i = 0; i < 20; i++) {
-                const note = scale[Math.floor(Math.random() * scale.length)];
-                // Slower notes, longer duration for ambient feel
-                playNote(note, t, 6);
-                t += 3.0;
+                masterGain.connect(audioCtx.destination);
+                const reverbGain = audioCtx.createGain();
+                reverbGain.gain.value = 0.7;
+                masterGain.connect(reverb).connect(reverbGain).connect(audioCtx.destination);
+            } else if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
             }
 
-            setTimeout(stopLiveCode, 65000);
+            scheduleNextBatch();
+        }
+
+        function stop() {
+            isPlaying = false;
+            stopLiveCode();
+
+            document.getElementById("btnStart").style.display = "inline-block";
+            document.getElementById("btnStop").style.display = "none";
+
+            // Stop all pending oscillators
+            activeOscillators.forEach(osc => {
+                try {
+                    osc.stop();
+                } catch (e) { }
+            });
+            activeOscillators = [];
+
+            if (audioCtx) {
+                audioCtx.suspend();
+            }
         }
     </script>
 
